@@ -1,8 +1,9 @@
-Select job_title_short, avg(salary_year_avg), median(salary_year_avg),MAX(salary_year_avg)
-from job_postings_fact
-group by 
-job_title_short
-having 
-median(salary_year_avg)>100_000
-Order by
-avg(salary_year_avg) DESC 
+SELECT
+	job_title_short,
+	AVG(salary_year_avg) AS avg_salary,
+	MEDIAN(salary_year_avg) AS median_salary,
+	MAX(salary_year_avg) AS max_salary
+FROM job_postings_fact
+GROUP BY job_title_short
+HAVING MEDIAN(salary_year_avg) > 100000
+ORDER BY avg_salary DESC;
