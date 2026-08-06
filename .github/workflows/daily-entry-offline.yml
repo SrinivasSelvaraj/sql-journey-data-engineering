@@ -1,0 +1,66 @@
+name: Daily entry
+
+on:
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-entry
+  cancel-in-progress: false
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install anthropic
+
+      - name: Configure git
+        run: |
+          git config user.name  "${{ vars.GIT_AUTHOR_NAME }}"
+          git config user.email "${{ vars.GIT_AUTHOR_EMAIL }}"
+
+      - name: Write and commit entries
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          # Random target 10-15, seeded by today's date so retries pick the same number
+          ENTRIES_PER_DAY=$(python3 -c "
+import random, datetime
+random.seed(datetime.date.today().isoformat())
+print(random.randint(10, 15))
+")
+          echo "Target entries today: ${ENTRIES_PER_DAY}"
+          committed=0
+
+          for i in $(seq 1 "${ENTRIES_PER_DAY}"); do
+            output=$(ENTRIES_PER_DAY="${ENTRIES_PER_DAY}" python scripts/next_entry.py 2>/dev/null)
+            changed=$(echo "$output" | grep "^changed=" | cut -d= -f2)
+            message=$(echo "$output" | grep "^message=" | cut -d= -f2-)
+
+            if [ "$changed" = "true" ]; then
+              git add log/
+              git commit -m "$message"
+              committed=$((committed + 1))
+            else
+              break
+            fi
+          done
+
+          echo "Committed ${committed} entries today."
+          if [ "$committed" -gt 0 ]; then
+            git push
+          fi
