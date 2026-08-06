@@ -1,0 +1,42 @@
+name: Daily entry
+
+on:
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-entry
+  cancel-in-progress: false
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Stagger start
+        run: sleep $(( RANDOM % 1800 ))
+
+      - name: Write next entry
+        id: gen
+        run: python scripts/next_entry.py
+
+      - name: Commit and push
+        if: steps.gen.outputs.changed == 'true'
+        env:
+          COMMIT_MESSAGE: ${{ steps.gen.outputs.message }}
+        run: |
+          set -euo pipefail
+          git config user.name  "${{ vars.GIT_AUTHOR_NAME }}"
+          git config user.email "${{ vars.GIT_AUTHOR_EMAIL }}"
+          git add log/
+          git commit -m "$COMMIT_MESSAGE"
+          git push
