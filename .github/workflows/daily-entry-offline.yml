@@ -15,6 +15,7 @@ concurrency:
 jobs:
   daily:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,21 +23,37 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Stagger start
-        run: sleep $(( RANDOM % 1800 ))
+      - name: Install dependencies
+        run: pip install anthropic
 
-      - name: Write next entry
-        id: gen
-        run: python scripts/next_entry.py
-
-      - name: Commit and push
-        if: steps.gen.outputs.changed == 'true'
-        env:
-          COMMIT_MESSAGE: ${{ steps.gen.outputs.message }}
+      - name: Configure git
         run: |
-          set -euo pipefail
           git config user.name  "${{ vars.GIT_AUTHOR_NAME }}"
           git config user.email "${{ vars.GIT_AUTHOR_EMAIL }}"
-          git add log/
-          git commit -m "$COMMIT_MESSAGE"
-          git push
+
+      - name: Write and commit entries
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ENTRIES_PER_DAY: "7"
+        run: |
+          set -euo pipefail
+          committed=0
+
+          for i in $(seq 1 "${ENTRIES_PER_DAY}"); do
+            output=$(python scripts/next_entry.py 2>/dev/null)
+            changed=$(echo "$output" | grep "^changed=" | cut -d= -f2)
+            message=$(echo "$output" | grep "^message=" | cut -d= -f2-)
+
+            if [ "$changed" = "true" ]; then
+              git add log/
+              git commit -m "$message"
+              committed=$((committed + 1))
+            else
+              break
+            fi
+          done
+
+          echo "Committed ${committed} entries today."
+          if [ "$committed" -gt 0 ]; then
+            git push
+          fi
