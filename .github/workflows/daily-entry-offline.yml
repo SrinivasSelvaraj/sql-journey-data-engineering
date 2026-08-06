@@ -34,13 +34,20 @@ jobs:
       - name: Write and commit entries
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ENTRIES_PER_DAY: "7"
         run: |
           set -euo pipefail
+
+          # Random target 10-15, seeded by today's date so retries pick the same number
+          ENTRIES_PER_DAY=$(python3 -c "
+import random, datetime
+random.seed(datetime.date.today().isoformat())
+print(random.randint(10, 15))
+")
+          echo "Target entries today: ${ENTRIES_PER_DAY}"
           committed=0
 
           for i in $(seq 1 "${ENTRIES_PER_DAY}"); do
-            output=$(python scripts/next_entry.py 2>/dev/null)
+            output=$(ENTRIES_PER_DAY="${ENTRIES_PER_DAY}" python scripts/next_entry.py 2>/dev/null)
             changed=$(echo "$output" | grep "^changed=" | cut -d= -f2)
             message=$(echo "$output" | grep "^message=" | cut -d= -f2-)
 
